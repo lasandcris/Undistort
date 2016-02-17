@@ -47,7 +47,9 @@ int main(void)
 
 	
 	vector<ImageFeatures> features(2);
+	vector<MatchesInfo> pairwise_matches;
 	finder = makePtr<OrbFeaturesFinder>();
+	vector<double> focals;
 
 	for (int i = 0; i < 2; ++i)
 	{
@@ -56,10 +58,67 @@ int main(void)
 			img = img1;
 		else
 			img = img2;
+
 		(*finder)(img, features[i]);
 		features[i].img_idx = i;
 		cout << "Features in image #" << i + 1 << ": " << features[i].keypoints.size() << endl;
 	}
+
+	finder->collectGarbage();
+
+	BestOf2NearestMatcher matchers(false, 0.3f);
+	matchers(features, pairwise_matches);
+	matchers.collectGarbage();
+
+	//estimateFocal(features, pairwise_matches, focals);
+
+	//cout << focals.size() << endl;
+
+	//for (int i = 0; i < 2; ++i)
+	//{
+		//cout << focals[i] << endl;
+
+	//}
+
+	HomographyBasedEstimator estimator;
+	vector<CameraParams> cameras;
+
+	if (!estimator(features, pairwise_matches, cameras))
+	{
+		cout << "Homography estimation failed.\n";
+		return -1;
+	}
+
+	double fieldOfViewX;
+	double fieldOfViewY;
+	double focalLength;
+	cv::Point2d principalPoint;
+	double aspectRatio;
+
+	for (size_t i = 0; i < cameras.size(); ++i)
+	{
+		Mat R;
+		cameras[i].R.convertTo(R, CV_32F);
+		cameras[i].R = R;
+		cout << "Initial intrinsics #" << i + 1 << ":\n" << cameras[i].K() << endl;
+		focals.push_back(cameras[i].focal);
+	
+		//cout << "focal: " << cameras[i].focal << endl;
+
+		calibrationMatrixValues(cameras[i].K(), img1.size(), 1, 1, fieldOfViewX, fieldOfViewY, focalLength, principalPoint, aspectRatio);
+	}
+
+	
+	float FOV = (2.0f * std::atan(0.5f*19.0409544f / 8.0f)) * 180.0f / 3.14159265359f;
+
+	cout << "FOV: " << fieldOfViewY << endl;
+
+	
+
+	//calibrationMatrixValues(cameras[0].K, img1.size(), 1, 1, fieldOfViewX, fieldOfViewY, focalLength, principalPoint, aspectRatio);
+	
+
+
 
 	//resize(img1, img1, Size(img1.cols / 2, img1.rows / 2));
 	//resize(img2, img2, Size(img2.cols / 2, img2.rows / 2));
